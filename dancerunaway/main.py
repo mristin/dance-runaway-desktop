@@ -434,8 +434,10 @@ def handle_in_game(
 
         # Check for collision
         if state.chaser.collides_with(state.runaway):
-            state.game_over = dancerunaway.events.GameOver(
-                kind=dancerunaway.events.GameOverKind.BUSTED
+            our_event_queue.append(
+                dancerunaway.events.GameOver(
+                    kind=dancerunaway.events.GameOverKind.BUSTED
+                )
             )
             return
 
@@ -445,8 +447,10 @@ def handle_in_game(
         )
         if runaway_masked_xmin >= SCENE_WIDTH:
             if state.level_index == len(media.levels) - 1:
-                state.game_over = dancerunaway.events.GameOver(
-                    kind=dancerunaway.events.GameOverKind.HAPPY_END
+                our_event_queue.append(
+                    dancerunaway.events.GameOver(
+                        kind=dancerunaway.events.GameOverKind.HAPPY_END
+                    )
                 )
                 return
             else:
@@ -562,6 +566,7 @@ def handle(
         if state.game_over is None:
             state.game_over = event
             if state.game_over.kind is dancerunaway.events.GameOverKind.HAPPY_END:
+                print("Playing the happy end music...")
                 pygame.mixer.music.load(str(media.happy_end_music_path))
                 pygame.mixer.music.play()
 
@@ -641,15 +646,6 @@ def render_game(state: State, media: Media) -> pygame.surface.Surface:
     scene.blit(state.chaser.determine_masked_sprite().sprite, state.chaser.xy)
 
     scene.blit(level.ground, (0, 0))
-
-    media.font.render_to(
-        scene,
-        (10, 10),
-        f"Chaser velocity: {state.chaser.velocity / 10:1.0f}, "
-        f"runaway velocity: {state.runaway.velocity / 10:1.0f}",
-        (255, 0, 0),
-        size=30,
-    )
 
     media.font.render_to(
         scene, (10, 490), 'Press "q" to quit and "r" to restart', (0, 0, 0), size=12
