@@ -94,13 +94,17 @@ class Media:
         levels: List[Level],
         pirate_run: List[MaskedSprite],
         troll_run: List[MaskedSprite],
+        ship: pygame.surface.Surface,
         font: pygame.freetype.Font,
+        happy_end_music_path: pathlib.Path,
     ) -> None:
         """Initialize with the given values."""
         self.levels = levels
         self.pirate_run = pirate_run
         self.troll_run = troll_run
+        self.ship = ship
         self.font = font
+        self.happy_end_music_path = happy_end_music_path
 
 
 SCENE_WIDTH = 640
@@ -174,16 +178,26 @@ def load_media() -> Tuple[Optional[Media], Optional[str]]:
 
         troll_run.append(sprite)
 
+    pth = images_dir / "happy_end/ship.png"
+    try:
+        ship = pygame.image.load(str(pth)).convert_alpha()
+    except Exception as exception:
+        return None, f"Failed to load {pth}: {exception}"
+
+    happy_end_music_path = PACKAGE_DIR / "media/music/happy_end.mid"
+    if not pth.exists():
+        return None, f"File does not exist: {happy_end_music_path}"
+
     return (
         Media(
-            # fmt: off
-        levels=levels,
-        pirate_run=pirate_run,
-        troll_run=troll_run,
-        font=pygame.freetype.Font(
-            str(PACKAGE_DIR / "media/fonts/freesansbold.ttf")
-        ),
-            # fmt: on
+            levels=levels,
+            pirate_run=pirate_run,
+            troll_run=troll_run,
+            ship=ship,
+            font=pygame.freetype.Font(
+                str(PACKAGE_DIR / "media/fonts/freesansbold.ttf")
+            ),
+            happy_end_music_path=happy_end_music_path,
         ),
         None,
     )
@@ -539,6 +553,7 @@ def handle(
     elif isinstance(our_event_queue[0], dancerunaway.events.ReceivedRestart):
         our_event_queue.pop(0)
         initialize_state(state, game_start=pygame.time.get_ticks() / 1000, media=media)
+        pygame.mixer.music.stop()
 
     elif isinstance(our_event_queue[0], dancerunaway.events.GameOver):
         event = our_event_queue[0]
@@ -547,8 +562,9 @@ def handle(
         if state.game_over is None:
             state.game_over = event
             if state.game_over.kind is dancerunaway.events.GameOverKind.HAPPY_END:
-                # Left for the future version: play victory
-                pass
+                pygame.mixer.music.load(str(media.happy_end_music_path))
+                pygame.mixer.music.play()
+
             elif state.game_over.kind is dancerunaway.events.GameOverKind.BUSTED:
                 # Left for the future version: play sad music
                 pass
@@ -572,6 +588,14 @@ def render_game_over(state: State, media: Media) -> pygame.surface.Surface:
 
     if state.game_over.kind is dancerunaway.events.GameOverKind.HAPPY_END:
         media.font.render_to(scene, (20, 20), "You made it!", (255, 255, 255), size=16)
+
+        runaway_left = pygame.transform.flip(
+            state.runaway.run_sprites[0].sprite, True, False
+        )
+        scene.blit(runaway_left, (280, 270))
+        scene.blit(media.ship, (300, 100))
+
+        scene.blit(state.chaser.run_sprites[0].sprite, (10, ACTORS_Y))
 
     elif state.game_over.kind is dancerunaway.events.GameOverKind.BUSTED:
         media.font.render_to(
