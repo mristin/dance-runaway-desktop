@@ -50,8 +50,12 @@ Please let us know by `creating an issue`_ if you tested the game with other mat
 
 Acknowledgments
 ===============
-Pirate images come from: https://opengameart.org/content/pirate-character-sprites
+The pirate images come from: https://opengameart.org/content/pirate-character-sprites
 
-Troll images are from: https://opengameart.org/content/2d-game-trolls-sprite
+The troll images are from: https://opengameart.org/content/2d-game-trolls-sprite
 
-Forest scene images are from: https://opengameart.org/content/cartoon-forest-2d-backgrounds
+The forest scene images are from: https://opengameart.org/content/cartoon-forest-2d-backgrounds
+
+The ship is from: https://opengameart.org/content/free-pirates-game-assets-by-unlucky-studio
+
+The happy end song is from: https://www.youtube.com/watch?v=rbrQOEGqVss
