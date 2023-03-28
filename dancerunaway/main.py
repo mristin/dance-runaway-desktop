@@ -7,7 +7,7 @@ import os.path
 import pathlib
 import sys
 import time
-from typing import Optional, Final, List, Union, Tuple, Sequence, Any
+from typing import Optional, Final, List, Union, Tuple, Sequence, Any, MutableMapping
 
 import pygame
 import pygame.freetype
@@ -92,16 +92,16 @@ class Media:
     def __init__(
         self,
         levels: List[Level],
-        pirate_run: List[MaskedSprite],
-        troll_run: List[MaskedSprite],
+        runaways: List[List[MaskedSprite]],
+        chasers: List[List[MaskedSprite]],
         ship: pygame.surface.Surface,
         font: pygame.freetype.Font,
         happy_end_music_path: pathlib.Path,
     ) -> None:
         """Initialize with the given values."""
         self.levels = levels
-        self.pirate_run = pirate_run
-        self.troll_run = troll_run
+        self.runaways = runaways
+        self.chasers = chasers
         self.ship = ship
         self.font = font
         self.happy_end_music_path = happy_end_music_path
@@ -160,23 +160,35 @@ def load_media() -> Tuple[Optional[Media], Optional[str]]:
             )
         )
 
-    pirate_run = []  # type: List[MaskedSprite]
-    for pth in sorted((images_dir / "pirate").glob("run*.png")):
-        try:
-            sprite = MaskedSprite(pygame.image.load(str(pth)).convert_alpha())
-        except Exception as exception:
-            return None, f"Failed to load {pth}: {exception}"
+    runaways = []  # type: List[List[MaskedSprite]]
+    for runaway_dir in sorted(
+        pth for pth in (images_dir / "runaways").iterdir() if pth.is_dir()
+    ):
+        run = []  # type: List[MaskedSprite]
+        for pth in sorted(runaway_dir.glob("*.png")):
+            try:
+                sprite = MaskedSprite(pygame.image.load(str(pth)).convert_alpha())
+            except Exception as exception:
+                return None, f"Failed to load {pth}: {exception}"
 
-        pirate_run.append(sprite)
+            run.append(sprite)
 
-    troll_run = []  # type: List[MaskedSprite]
-    for pth in sorted((images_dir / "troll").glob("run*.png")):
-        try:
-            sprite = MaskedSprite(pygame.image.load(str(pth)).convert_alpha())
-        except Exception as exception:
-            return None, f"Failed to load {pth}: {exception}"
+        runaways.append(run)
 
-        troll_run.append(sprite)
+    chasers = []  # type: List[List[MaskedSprite]]
+    for chaser_dir in sorted(
+        pth for pth in (images_dir / "chasers").iterdir() if pth.is_dir()
+    ):
+        run = []
+        for pth in sorted(chaser_dir.glob("*.png")):
+            try:
+                sprite = MaskedSprite(pygame.image.load(str(pth)).convert_alpha())
+            except Exception as exception:
+                return None, f"Failed to load {pth}: {exception}"
+
+            run.append(sprite)
+
+        chasers.append(run)
 
     pth = images_dir / "happy_end/ship.png"
     try:
@@ -191,8 +203,8 @@ def load_media() -> Tuple[Optional[Media], Optional[str]]:
     return (
         Media(
             levels=levels,
-            pirate_run=pirate_run,
-            troll_run=troll_run,
+            runaways=runaways,
+            chasers=chasers,
             ship=ship,
             font=pygame.freetype.Font(
                 str(PACKAGE_DIR / "media/fonts/freesansbold.ttf")
@@ -329,10 +341,7 @@ RUNAWAY_FRAME_TIME_DELTA = 0.1
 
 
 class State:
-    """Capture the global state of the game."""
-
-    #: Set if we received the signal to quit the game
-    received_quit: bool
+    """Capture the global state of the game excluding the dialogues."""
 
     #: Timestamp when the game started, seconds since epoch
     game_start: float
@@ -353,29 +362,38 @@ class State:
 
     level_index: int
 
-    def __init__(self, game_start: float, media: Media) -> None:
+    def __init__(
+        self,
+        game_start: float,
+        runaway_sprites: List[MaskedSprite],
+        chaser_sprites: List[MaskedSprite],
+    ) -> None:
         """Initialize with the given values and the defaults."""
-        initialize_state(self, game_start, media)
+        initialize_state(self, game_start, runaway_sprites, chaser_sprites)
 
 
 #: In pixels
 ACTORS_Y = 330
 
 
-def initialize_state(state: State, game_start: float, media: Media) -> None:
+def initialize_state(
+    state: State,
+    game_start: float,
+    runaway_sprites: List[MaskedSprite],
+    chaser_sprites: List[MaskedSprite],
+) -> None:
     """Initialize the state to the start one."""
-    state.received_quit = False
     state.game_start = game_start
     state.now = game_start
     state.game_over = None
 
     state.runaway = Runaway(
-        xy=(3.0 * INITIAL_CHASER_VELOCITY, ACTORS_Y), run_sprites=media.pirate_run
+        xy=(3.0 * INITIAL_CHASER_VELOCITY, ACTORS_Y), run_sprites=runaway_sprites
     )
 
     state.chaser = Chaser(
-        xy=(-media.troll_run[0].get_width(), ACTORS_Y),
-        run_sprites=media.troll_run,
+        xy=(-chaser_sprites[0].get_width(), ACTORS_Y),
+        run_sprites=chaser_sprites,
         time_for_next_sprite=state.now + 0.1,
     )
 
@@ -550,16 +568,7 @@ def handle(
     if len(our_event_queue) == 0:
         return
 
-    if isinstance(our_event_queue[0], dancerunaway.events.ReceivedQuit):
-        our_event_queue.pop(0)
-        state.received_quit = True
-
-    elif isinstance(our_event_queue[0], dancerunaway.events.ReceivedRestart):
-        our_event_queue.pop(0)
-        initialize_state(state, game_start=pygame.time.get_ticks() / 1000, media=media)
-        pygame.mixer.music.stop()
-
-    elif isinstance(our_event_queue[0], dancerunaway.events.GameOver):
+    if isinstance(our_event_queue[0], dancerunaway.events.GameOver):
         event = our_event_queue[0]
         our_event_queue.pop(0)
 
@@ -693,6 +702,172 @@ def resize_scene_to_surface_and_blit(
         surface.blit(scene, (0, margin))
 
 
+# fmt: off
+@ensure(
+    lambda result:
+    (result[0] is not None and result[1] is not None and not result[2])
+    ^
+    (result[0] is None and result[1] is None and result[2])
+)
+# fmt: on
+def select_actors(
+    surface: pygame.surface.Surface, media: Media
+) -> Tuple[Optional[List[MaskedSprite]], Optional[List[MaskedSprite]], bool]:
+    """Handle the dialogue where the player chooses the runaway and the chaser."""
+    runaway_sprites = None  # type: Optional[List[MaskedSprite]]
+    chaser_sprites = None  # type: Optional[List[MaskedSprite]]
+    should_quit = False
+
+    key_to_runaway_i = dict()  # type: MutableMapping[int, int]
+    runaway_chars = []  # type: List[str]
+    key_to_chaser_i = dict()  # type: MutableMapping[int, int]
+    chaser_chars = []  # type: List[str]
+
+    actor_i = 0
+
+    max_actors = ord("q") - ord("a")
+
+    for runaway_i in range(len(media.runaways)):
+        assert actor_i < max_actors
+        key_to_runaway_i[pygame.K_a + actor_i] = runaway_i
+        runaway_chars.append(chr(ord("a") + actor_i))
+
+        actor_i += 1
+
+    selected_runaway_i = 0
+    selected_chaser_i = 0
+
+    for chaser_i in range(len(media.chasers)):
+        assert actor_i < max_actors
+        key_to_chaser_i[pygame.K_a + actor_i] = chaser_i
+        chaser_chars.append(chr(ord("a") + actor_i))
+
+        actor_i += 1
+
+    should_quit = False
+    should_start = False
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                should_quit = True
+                break
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key in (
+                    pygame.K_ESCAPE,
+                    pygame.K_q,
+                ):
+                    should_quit = True
+                    break
+
+                elif event.key in key_to_runaway_i:
+                    selected_runaway_i = key_to_runaway_i[event.key]
+
+                elif event.key in key_to_chaser_i:
+                    selected_chaser_i = key_to_chaser_i[event.key]
+
+                elif event.key == pygame.K_s:
+                    should_start = True
+                    break
+
+                else:
+                    pass
+
+            else:
+                pass
+
+        assert (not should_quit and not should_start) or (
+            should_quit ^ should_start
+        ), f"{should_quit=}, {should_start=}"
+
+        if should_quit or should_start:
+            break
+
+        scene = pygame.surface.Surface((SCENE_WIDTH, SCENE_HEIGHT))
+        scene.fill((0, 0, 0))
+
+        media.font.render_to(
+            scene,
+            (20, 20),
+            "Please select the runaway and the chaser:",
+            (255, 255, 255),
+            size=16,
+        )
+
+        offset_x = 20
+        offset_y = 60
+        for runaway_i, runaway_sprites in enumerate(media.runaways):
+            sprite = runaway_sprites[runaway_i].sprite
+            scene.blit(sprite, (offset_x, offset_y))
+
+            media.font.render_to(
+                scene,
+                (
+                    offset_x + round(sprite.get_width() / 2),
+                    offset_y + sprite.get_height() + 5,
+                ),
+                runaway_chars[runaway_i],
+                (255, 255, 255),
+                size=32,
+            )
+
+            if runaway_i == selected_runaway_i:
+                pygame.draw.rect(
+                    scene,
+                    (255, 255, 255),
+                    (offset_x, offset_y, sprite.get_width(), sprite.get_height()),
+                    3,
+                )
+
+            offset_x += sprite.get_width() + 10
+
+        offset_x = 20
+        offset_y = 60 + runaway_sprites[0].sprite.get_height() + 50
+
+        for chaser_i, chaser_sprites in enumerate(media.chasers):
+            sprite = chaser_sprites[chaser_i].sprite
+            scene.blit(sprite, (offset_x, offset_y))
+
+            media.font.render_to(
+                scene,
+                (
+                    offset_x + round(sprite.get_width() / 2),
+                    offset_y + sprite.get_height() + 5,
+                ),
+                chaser_chars[chaser_i],
+                (255, 255, 255),
+                size=32,
+            )
+
+            if chaser_i == selected_chaser_i:
+                pygame.draw.rect(
+                    scene,
+                    (255, 255, 255),
+                    (offset_x, offset_y, sprite.get_width(), sprite.get_height()),
+                    3,
+                )
+
+            offset_x += sprite.get_width() + 10
+
+        media.font.render_to(
+            scene,
+            (20, SCENE_HEIGHT - 20),
+            'Press "s" to start and "q" to quit',
+            (255, 255, 255),
+            size=16,
+        )
+
+        resize_scene_to_surface_and_blit(scene, surface)
+        pygame.display.flip()
+
+    if not should_quit:
+        runaway_sprites = media.runaways[selected_runaway_i]
+        chaser_sprites = media.chasers[selected_chaser_i]
+        return runaway_sprites, chaser_sprites, False
+
+    return None, None, True
+
+
 def main(prog: str) -> int:
     """
     Execute the main routine.
@@ -742,23 +917,28 @@ def main(prog: str) -> int:
     # noinspection PyUnusedLocal
     active_joystick = None  # type: Any
 
-    if len(joysticks) == 0:
+    DEBUG = True
+
+    if not DEBUG:
+        if len(joysticks) == 0:
+            print(
+                f"There are no joysticks plugged in. "
+                f"{prog.capitalize()} requires a joystick.",
+                file=sys.stderr,
+            )
+            return 1
+
+        else:
+            active_joystick = next(
+                joystick
+                for joystick in joysticks
+                if joystick.get_guid() == args.joystick
+            )
+
+        assert active_joystick is not None
         print(
-            f"There are no joysticks plugged in. "
-            f"{prog.capitalize()} requires a joystick.",
-            file=sys.stderr,
+            f"Using the joystick: {active_joystick.get_name()} {active_joystick.get_guid()}"
         )
-        return 1
-
-    else:
-        active_joystick = next(
-            joystick for joystick in joysticks if joystick.get_guid() == args.joystick
-        )
-
-    assert active_joystick is not None
-    print(
-        f"Using the joystick: {active_joystick.get_name()} {active_joystick.get_guid()}"
-    )
 
     # NOTE (mristin, 2023-03-26):
     # We have to think a bit better about how to deal with keyboard and joystick input.
@@ -781,8 +961,6 @@ def main(prog: str) -> int:
 
     pygame.display.set_caption("dance-runaway-desktop")
 
-    DEBUG = False
-
     if not run_in_window:
         surface = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     else:
@@ -798,23 +976,47 @@ def main(prog: str) -> int:
 
     assert media is not None
 
-    now = pygame.time.get_ticks() / 1000
     clock = pygame.time.Clock()
 
-    state = State(game_start=now, media=media)
+    should_quit = False
+    while not should_quit:
+        # fmt: off
+        runaway_sprites, chaser_sprites, should_quit = (
+            select_actors(
+                surface,
+                media
+            )
+        )
+        # fmt: on
 
-    our_event_queue = []  # type: List[dancerunaway.events.EventUnion]
+        if should_quit:
+            break
 
-    # Reuse the tick object so that we don't have to create it every time
-    tick_event = dancerunaway.events.Tick()
+        assert runaway_sprites is not None
+        assert chaser_sprites is not None
 
-    try:
-        while True:
+        now = pygame.time.get_ticks() / 1000
+
+        state = State(
+            game_start=now,
+            runaway_sprites=runaway_sprites,
+            chaser_sprites=chaser_sprites,
+        )
+
+        our_event_queue = []  # type: List[dancerunaway.events.EventUnion]
+
+        # Reuse the tick object so that we don't have to create it every time
+        tick_event = dancerunaway.events.Tick()
+
+        while not should_quit:
             old_state_game_over = state.game_over
+
+            should_restart = False
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    our_event_queue.append(dancerunaway.events.ReceivedQuit())
+                    should_quit = True
+                    break
 
                 elif (
                     event.type == pygame.JOYBUTTONDOWN
@@ -833,12 +1035,13 @@ def main(prog: str) -> int:
                     pygame.K_ESCAPE,
                     pygame.K_q,
                 ):
-                    our_event_queue.append(dancerunaway.events.ReceivedQuit())
+                    should_quit = True
+                    break
 
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                    # NOTE (mristin, 2023-03-26):
-                    # Restart the game whenever "r" is pressed
-                    our_event_queue.append(dancerunaway.events.ReceivedRestart())
+                    # Leave the inner-game loop and start the game totally from anew
+                    should_restart = True
+                    break
 
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_LEFT:
                     if DEBUG:
@@ -860,6 +1063,9 @@ def main(prog: str) -> int:
                     # Ignore the event that we do not handle
                     pass
 
+            if should_quit or should_restart:
+                break
+
             our_event_queue.append(tick_event)
 
             while len(our_event_queue) > 0:
@@ -867,10 +1073,7 @@ def main(prog: str) -> int:
 
             scene = None  # type: Optional[pygame.surface.Surface]
 
-            if state.received_quit:
-                scene = render_quit(media)
-
-            elif old_state_game_over is None and state.game_over is not None:
+            if old_state_game_over is None and state.game_over is not None:
                 scene = render_game_over(state, media)
 
             elif old_state_game_over is not None and state.game_over is not None:
@@ -887,18 +1090,18 @@ def main(prog: str) -> int:
                 resize_scene_to_surface_and_blit(scene, surface)
                 pygame.display.flip()
 
-            if state.received_quit:
-                break
-
             # Enforce 30 frames per second
             clock.tick(30)
 
-    finally:
-        print("Quitting the game...")
-        tic = time.time()
-        pygame.joystick.quit()
-        pygame.quit()
-        print(f"Quit the game after: {time.time() - tic:.2f} seconds")
+    scene = render_quit(media)
+    resize_scene_to_surface_and_blit(scene, surface)
+    pygame.display.flip()
+
+    print("Quitting the game...")
+    tic = time.time()
+    pygame.joystick.quit()
+    pygame.quit()
+    print(f"Quit the game after: {time.time() - tic:.2f} seconds")
 
     return 0
 

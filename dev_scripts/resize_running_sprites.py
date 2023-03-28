@@ -16,18 +16,21 @@ def main() -> int:
 
     this_path = pathlib.Path(os.path.realpath(__file__))
 
-    images_dir = this_path.parent.parent / "dancerunaway/media/images/troll"
+    images_dir = this_path.parent.parent / "dancerunaway/media/images"
 
-    for pth in sorted(images_dir.glob("*.png")):
-        with PIL.Image.open(str(pth)) as image:
-            png_info = dict()
-            if image.mode not in ['RGB', 'RGBA']:
-                image = image.convert('RGBA')
-                png_info = image.info
+    for actor_type in ["runaways", "chasers"]:
+        actor_dir = images_dir / actor_type
 
-            resized = image.resize((187, 128))
+        for pth in sorted(actor_dir.glob("**/*.png")):
+            with PIL.Image.open(str(pth)) as image:
+                png_info = dict()
+                if image.mode not in ['RGB', 'RGBA']:
+                    image = image.convert('RGBA')
+                    png_info = image.info
 
-        resized.save(str(pth), **png_info)
+                resized = image.resize((187, 128))
+
+            resized.save(str(pth), **png_info)
 
     return 0
 
