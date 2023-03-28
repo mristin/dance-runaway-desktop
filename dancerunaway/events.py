@@ -22,13 +22,6 @@ class Tick(Event):
         return self.__class__.__name__
 
 
-class ReceivedQuit(Event):
-    """Signal that we have to exit the game."""
-
-    def __str__(self) -> str:
-        return self.__class__.__name__
-
-
 class GameOverKind(enum.Enum):
     """Model different game endings."""
 
@@ -83,11 +76,4 @@ class MakeStep(Event):
         return self.__class__.__name__
 
 
-class ReceivedRestart(Event):
-    """Capture the event that we want to restart the game."""
-
-    def __str__(self) -> str:
-        return self.__class__.__name__
-
-
-EventUnion = Union[Tick, ReceivedQuit, GameOver, ButtonDown, MakeStep, ReceivedRestart]
+EventUnion = Union[Tick, GameOver, ButtonDown, MakeStep]
