@@ -16,7 +16,7 @@ from setuptools import setup, find_packages
 setup(
     name="dance-runaway-desktop",
     # Don't forget to update the version in __init__.py and CHANGELOG.rst!
-    version="0.0.1",
+    version="0.0.2",
     description="Run away dancing the mat.",
     url="https://github.com/mristin/dance-runaway-desktop",
     author="Marko Ristin",
