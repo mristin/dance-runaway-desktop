@@ -96,7 +96,7 @@ class Media:
         chasers: List[List[MaskedSprite]],
         ship: pygame.surface.Surface,
         font: pygame.freetype.Font,
-        happy_end_music_path: pathlib.Path,
+        music_path: pathlib.Path,
     ) -> None:
         """Initialize with the given values."""
         self.levels = levels
@@ -104,7 +104,7 @@ class Media:
         self.chasers = chasers
         self.ship = ship
         self.font = font
-        self.happy_end_music_path = happy_end_music_path
+        self.music_path = music_path
 
 
 SCENE_WIDTH = 640
@@ -196,9 +196,9 @@ def load_media() -> Tuple[Optional[Media], Optional[str]]:
     except Exception as exception:
         return None, f"Failed to load {pth}: {exception}"
 
-    happy_end_music_path = PACKAGE_DIR / "media/music/happy_end.mid"
+    music_path = PACKAGE_DIR / "media/music/wellerman.mid"
     if not pth.exists():
-        return None, f"File does not exist: {happy_end_music_path}"
+        return None, f"File does not exist: {music_path}"
 
     return (
         Media(
@@ -209,7 +209,7 @@ def load_media() -> Tuple[Optional[Media], Optional[str]]:
             font=pygame.freetype.Font(
                 str(PACKAGE_DIR / "media/fonts/freesansbold.ttf")
             ),
-            happy_end_music_path=happy_end_music_path,
+            music_path=music_path,
         ),
         None,
     )
@@ -575,9 +575,8 @@ def handle(
         if state.game_over is None:
             state.game_over = event
             if state.game_over.kind is dancerunaway.events.GameOverKind.HAPPY_END:
-                print("Playing the happy end music...")
-                pygame.mixer.music.load(str(media.happy_end_music_path))
-                pygame.mixer.music.play()
+                # Left for the future version: play victory music
+                pass
 
             elif state.game_over.kind is dancerunaway.events.GameOverKind.BUSTED:
                 # Left for the future version: play sad music
@@ -917,7 +916,7 @@ def main(prog: str) -> int:
     # noinspection PyUnusedLocal
     active_joystick = None  # type: Any
 
-    DEBUG = True
+    DEBUG = False
 
     if not DEBUG:
         if len(joysticks) == 0:
@@ -1008,6 +1007,9 @@ def main(prog: str) -> int:
         # Reuse the tick object so that we don't have to create it every time
         tick_event = dancerunaway.events.Tick()
 
+        pygame.mixer.music.load(media.music_path)
+        pygame.mixer.music.play()
+
         while not should_quit:
             old_state_game_over = state.game_over
 
@@ -1064,6 +1066,7 @@ def main(prog: str) -> int:
                     pass
 
             if should_quit or should_restart:
+                pygame.mixer.music.stop()
                 break
 
             our_event_queue.append(tick_event)
